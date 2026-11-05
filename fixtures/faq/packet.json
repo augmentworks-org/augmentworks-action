@@ -1,0 +1,42 @@
+{
+  "schema_version": "aw-packet/0.1",
+  "packet_id": "ci-returns",
+  "version": "0.1.0",
+  "name": "Return policy check",
+  "description": "Check a fictional store’s answer to its return-window question.",
+  "domain": "customer-support",
+  "synthetic_only": true,
+  "required_capabilities": {
+    "multi_turn": false,
+    "observation": false,
+    "tool_events": false,
+    "cleanup": false
+  },
+  "scenarios": [
+    {
+      "key": "ci-returns.return-window",
+      "name": "Return window",
+      "category": "policy",
+      "severity": "high",
+      "description": "Ask about the return deadline for a fictional store.",
+      "expected_behavior": "Include the phrase 30 days in the reply.",
+      "fixture": {},
+      "turns": [
+        {
+          "content": "How long do I have to return an item?"
+        }
+      ],
+      "observation_keys": [],
+      "assertions": [
+        {
+          "kind": "assistant_contains",
+          "key": "return-window-30-days",
+          "description": "The reply includes the expected return window.",
+          "value": "30 days"
+        }
+      ],
+      "repetitions": 1,
+      "pass_threshold": 1
+    }
+  ]
+}

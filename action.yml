@@ -1,0 +1,51 @@
+name: AugmentWorks Agent Regression Tests
+description: Test an HTTP agent against business policies and surface failed checks and hosted reports in GitHub Actions.
+author: AugmentWorks
+branding:
+  icon: check-circle
+  color: blue
+inputs:
+  mode:
+    description: 'local (default), hosted, or demo. Demo uses a built-in loopback agent.'
+    default: local
+  working-directory:
+    description: Directory containing the assessment configuration, relative to the caller workspace.
+    default: '.'
+  config:
+    description: CLI target configuration relative to working-directory.
+    default: augmentworks.yaml
+  packet:
+    description: Local packet file, directory, or bundled packet ID. Required in local mode.
+  assessment:
+    description: Hosted assessment configuration relative to working-directory.
+    default: augmentworks.assessment.yaml
+  max-credits:
+    description: Explicit nonnegative integer credit ceiling. Required for hosted mode.
+  api-key:
+    description: Scoped hosted workspace machine key. Alternatively set AUGMENTWORKS_API_KEY in the step environment.
+  workspace-id:
+    description: Expected hosted workspace UUID. Alternatively set AUGMENTWORKS_WORKSPACE_ID.
+  baseline-id:
+    description: Optional pinned baseline UUID for an additional hosted release gate. Alternatively set AUGMENTWORKS_BASELINE_ID.
+  output-dir:
+    description: Fresh report directory inside working-directory. Defaults to a unique directory under .augmentworks.
+  tested-revision:
+    description: Optional full commit SHA independently confirmed for the target build. The event SHA is recorded separately.
+outputs:
+  outcome:
+    description: Assessment or operational outcome.
+  exit-code:
+    description: Numeric action exit code; nonzero also fails the step.
+  run-id:
+    description: AugmentWorks run ID when one was established.
+  report-path:
+    description: Absolute path on the runner to the local report.json or the saved hosted summary.
+  report-url:
+    description: Hosted dashboard link when a hosted run ID is known.
+  failed-checks:
+    description: JSON array of identified failing policy checks. Reports may contain additional details.
+  provenance-path:
+    description: Absolute path to a runner-local JSON file associating the run with available GitHub revision and PR metadata.
+runs:
+  using: node24
+  main: src/main.mjs

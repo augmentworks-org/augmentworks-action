@@ -1,0 +1,127 @@
+name: Test AugmentWorks Action
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests and caller workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: node --test
+
+      - name: Run the built-in demo through the Action
+        uses: ./
+        id: demo
+        with:
+          mode: demo
+      - name: Check demo outputs
+        env:
+          DEMO_OUTCOME: ${{ steps.demo.outputs.outcome }}
+          DEMO_EXIT: ${{ steps.demo.outputs.exit-code }}
+          DEMO_REPORT: ${{ steps.demo.outputs.report-path }}
+        run: |
+          test "$DEMO_OUTCOME" = passed
+          test "$DEMO_EXIT" = 0
+          test -s "$DEMO_REPORT"
+
+      - name: Start the fictional HTTP agent with a broken return policy
+        env:
+          CHATBOT_API_KEY: ci-fictional-token
+        run: |
+          dir="$RUNNER_TEMP/return-window-fixture"
+          mkdir -p "$dir"
+          echo 'You have 7 days to return your order.' > "$dir/answer"
+          node fixtures/faq/server.mjs "$dir" > "$dir/server.log" 2>&1 &
+          echo "$!" > "$dir/pid"
+          for attempt in {1..50}; do
+            if test -s "$dir/url"; then break; fi
+            sleep 0.1
+          done
+          test -s "$dir/url"
+          printf 'CHATBOT_BASE_URL=%s\n' "$(cat "$dir/url")" >> "$GITHUB_ENV"
+
+      - name: Detect the broken policy
+        id: before
+        uses: ./
+        continue-on-error: true
+        env:
+          CHATBOT_API_KEY: ci-fictional-token
+        with:
+          mode: local
+          working-directory: fixtures/faq
+          config: augmentworks.yaml
+          packet: packet.json
+      - name: Correct the fixture's policy
+        run: echo 'You have 30 days to return your order.' > "$RUNNER_TEMP/return-window-fixture/answer"
+      - name: Rerun the same packet after the fix
+        id: after
+        uses: ./
+        env:
+          CHATBOT_API_KEY: ci-fictional-token
+        with:
+          mode: local
+          working-directory: fixtures/faq
+          config: augmentworks.yaml
+          packet: packet.json
+      - name: Verify caller-visible failures, outputs and private artifacts
+        env:
+          BEFORE_STEP: ${{ steps.before.outcome }}
+          AFTER_STEP: ${{ steps.after.outcome }}
+          BEFORE_EXIT: ${{ steps.before.outputs.exit-code }}
+          AFTER_EXIT: ${{ steps.after.outputs.exit-code }}
+          BEFORE_OUTCOME: ${{ steps.before.outputs.outcome }}
+          AFTER_OUTCOME: ${{ steps.after.outputs.outcome }}
+          BEFORE_ID: ${{ steps.before.outputs.run-id }}
+          AFTER_ID: ${{ steps.after.outputs.run-id }}
+          BEFORE_CHECKS: ${{ steps.before.outputs.failed-checks }}
+          AFTER_CHECKS: ${{ steps.after.outputs.failed-checks }}
+          BEFORE_PROVENANCE: ${{ steps.before.outputs.provenance-path }}
+          AFTER_PROVENANCE: ${{ steps.after.outputs.provenance-path }}
+          BEFORE_PATH: ${{ steps.before.outputs.report-path }}
+          AFTER_PATH: ${{ steps.after.outputs.report-path }}
+        run: |
+          test "$BEFORE_STEP" = failure
+          test "$AFTER_STEP" = success
+          test "$BEFORE_EXIT" = 10
+          test "$AFTER_EXIT" = 0
+          test "$BEFORE_OUTCOME" = failed
+          test "$AFTER_OUTCOME" = passed
+          test -n "$BEFORE_ID"
+          test -n "$AFTER_ID"
+          test "$BEFORE_ID" != "$AFTER_ID"
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          import { dirname, join } from "node:path";
+          for (const prefix of ["BEFORE", "AFTER"]) {
+            const path = process.env[prefix + "_PATH"];
+            const report = JSON.parse(await readFile(path, "utf8"));
+            const checks = JSON.parse(process.env[prefix + "_CHECKS"]);
+            assert.deepEqual(checks, prefix === "BEFORE" ? ["return-window-30-days"] : []);
+            const provenance = JSON.parse(await readFile(process.env[prefix + "_PROVENANCE"], "utf8"));
+            assert.equal(provenance.run_id, report.run_id);
+            assert.equal(provenance.event_sha, process.env.GITHUB_SHA);
+            assert.equal(report.run_id, process.env[prefix + "_ID"]);
+            assert.equal(report.outcome, process.env[prefix + "_OUTCOME"]);
+            const check = report.attempts[0].assertions.find(item => item.key === "return-window-30-days");
+            assert.equal(check.passed, prefix === "AFTER");
+            assert.match(await readFile(join(dirname(path), "junit.xml"), "utf8"), /<testsuite/);
+            assert.match(await readFile(join(dirname(path), "report.html"), "utf8"), /<html/i);
+          }
+          JS
+      - name: Stop the fixture
+        if: always()
+        run: |
+          pid_file="$RUNNER_TEMP/return-window-fixture/pid"
+          if test -s "$pid_file"; then kill "$(cat "$pid_file")" || true; fi

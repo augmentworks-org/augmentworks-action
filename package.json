@@ -1,0 +1,10 @@
+{
+  "name": "augmentworks-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Run AugmentWorks agent regression tests in GitHub Actions",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "license": "Apache-2.0",
+  "scripts": { "test": "node --test" }
+}
