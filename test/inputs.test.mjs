@@ -67,3 +67,61 @@ test('reject a packet file that symlinks outside the workspace', { skip: process
   await symlink(join(dir, 'private-file'), join(root, 'packet.json'));
   await assert.rejects(readInputs({ GITHUB_WORKSPACE: root, INPUT_PACKET: '.' }), /inside/);
 });
+
+test('linked hosted inputs require an explicit saved shard and protect the platform key destination', async t => {
+  const root = await directory(t);
+  for (const name of ['augmentworks.yaml', 'augmentworks.assessment.yaml', 'selection.json']) await writeFile(join(root, name), '');
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const env = { GITHUB_WORKSPACE: root, GITHUB_JOB: 'policy', INPUT_MODE: 'hosted', 'INPUT_GITHUB-LINK': 'required',
+    'INPUT_API-KEY': 'aw_api_' + 'x'.repeat(40), 'INPUT_MAX-CREDITS': '3', 'INPUT_WORKSPACE-ID': id,
+    'INPUT_BINDING-ID': id, 'INPUT_SUITE-REVISION-ID': id, INPUT_SHARD: 'shard-000' };
+  const options = await readInputs(env);
+  assert.equal(options.jobKey, 'policy');
+  const uppercase = await readInputs({ ...env, 'INPUT_BINDING-ID': id.toUpperCase(), 'INPUT_SUITE-REVISION-ID': id.toUpperCase() });
+  assert.equal(uppercase.bindingId, id);
+  assert.equal(uppercase.suiteRevisionId, id);
+  assert.equal(options.assessment, join(root, 'augmentworks.assessment.yaml'));
+  const child = childEnvironment({ ...env, AUGMENTWORKS_API_URL: 'https://other.example' }, options);
+  assert.equal(child.AUGMENTWORKS_API_URL, 'https://staging.augmentworks.ai');
+  const manifest = await readInputs({ ...env, INPUT_MANIFEST: 'selection.json', 'INPUT_PLATFORM-ENVIRONMENT': 'production' });
+  assert.equal(manifest.assessment, undefined);
+  assert.equal(manifest.manifest, join(root, 'selection.json'));
+  assert.equal(manifest.apiOrigin, 'https://augmentworks.ai');
+  for (const overrides of [
+    { INPUT_ASSESSMENT: 'augmentworks.assessment.yaml', INPUT_MANIFEST: 'selection.json' },
+    { INPUT_MODE: 'demo' }, { 'INPUT_GITHUB-LINK': 'off' }, { 'INPUT_GITHUB-LINK': 'optional' },
+    { 'INPUT_PLATFORM-ENVIRONMENT': 'https://foo.example' }, { 'INPUT_BINDING-ID': '' },
+    { 'INPUT_SUITE-REVISION-ID': 'latest' }, { INPUT_SHARD: '' }, { INPUT_SHARD: '--all-shards' },
+    { 'INPUT_MATRIX-LEG': 'node24' }, { 'INPUT_EVALUATION-SLOT': '2' }, { 'INPUT_OPERATION-ID': id },
+    { 'INPUT_DEPLOYMENT-ID': 'dpl_test' }, { 'INPUT_BASELINE-ID': id }, { AUGMENTWORKS_BASELINE_ID: id },
+    { 'INPUT_TESTED-REVISION': 'a'.repeat(40) }, { 'INPUT_JOB-KEY': 'multi job' },
+  ]) await assert.rejects(readInputs({ ...env, ...overrides }), { name: 'Error' });
+});
+
+test('linked mode rejects unprotected refs, unsupported events and missing run context', async () => {
+  const env = { GITHUB_REPOSITORY: 'acme/repo', GITHUB_REPOSITORY_OWNER_ID: '12', GITHUB_REPOSITORY_ID: '123',
+    GITHUB_SHA: 'a'.repeat(40), GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '2',
+    GITHUB_REF_PROTECTED: 'true', GITHUB_REF: 'refs/heads/release', GITHUB_EVENT_NAME: 'push' };
+  assert.equal((await readEvent(env, 'hosted', 'required')).workflow_attempt, '2');
+  for (const override of [{ GITHUB_EVENT_NAME: 'workflow_dispatch' }, { GITHUB_EVENT_NAME: 'pull_request' },
+    { GITHUB_EVENT_NAME: 'pull_request_target' }, { GITHUB_REF_PROTECTED: 'false' }, { GITHUB_REF: 'refs/tags/v1' },
+    { GITHUB_SHA: 'abc' }, { GITHUB_REPOSITORY_ID: '' }, { GITHUB_RUN_ATTEMPT: '0' }]) {
+    await assert.rejects(readEvent({ ...env, ...override }, 'hosted', 'required'));
+  }
+});
+
+test('fixed-target provenance reports the GitHub event commit and unknown deployed revision separately', async t => {
+  const dir = await directory(t);
+  const env = { RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, 'output'), GITHUB_STEP_SUMMARY: join(dir, 'summary') };
+  const event = { event_sha: 'a'.repeat(40) };
+  const options = { mode: 'hosted', githubLink: 'required' };
+  const result = { runId: '11111111-1111-4111-8111-111111111111', linkStatus: 'linked', revisionVerification: 'unknown', exitCode: 11, outcome: 'incomplete' };
+  const path = await writeProvenance(env, event, options, result);
+  const doc = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(doc.link_status, 'linked');
+  assert.equal(doc.event_sha, event.event_sha);
+  assert.equal(doc.tested_revision, null);
+  assert.equal(doc.revision_verification, 'unknown');
+  await publishResult(env, result, path);
+  assert.match(await readFile(env.GITHUB_OUTPUT, 'utf8'), /link-status=linked\nrevision-verification=unknown/);
+});

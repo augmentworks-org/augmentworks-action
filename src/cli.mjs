@@ -5,9 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
-// npm dist.integrity of the complete published package, including its data assets.
-const archive = new URL("../vendor/augmentworks-cli-0.4.2.tgz", import.meta.url);
-const integrity = "jyXZSnW8L1AcET3fjMLm9++Izjeu061Za/3Iis3gy+foWUqW0OhScjU8Vr9bm3yDiP+ExRuAYvMac/cZrWZ6tA==";
+const publishedCli = {
+  archive: new URL("../vendor/augmentworks-cli-0.4.2.tgz", import.meta.url),
+  integrity: "jyXZSnW8L1AcET3fjMLm9++Izjeu061Za/3Iis3gy+foWUqW0OhScjU8Vr9bm3yDiP+ExRuAYvMac/cZrWZ6tA==",
+};
+// The published package predates --ci-admission. See vendor/README.md.
+const linkedCli = {
+  archive: new URL("../vendor/augmentworks-cli-f4097e989d68.tgz", import.meta.url),
+  integrity: "eP08CQ4JEREW8fp6KSiUnAVSY6ERUar030WJf4czio8K4FU7BU8pxLUpzQCV0QFk/xfLjIXgLCuoF4Fu9fq/2Q==",
+};
 const outputLimit = 32 * 1024 * 1024;
 
 function cliEnvironment(env) {
@@ -73,7 +79,8 @@ function runChild(command, args, { cwd, env, signal, timeoutMs, stdin }) {
   });
 }
 
-export async function prepareCli({ cwd, env = process.env, tempDir = tmpdir() }) {
+export async function prepareCli({ cwd, env = process.env, tempDir = tmpdir(), linked = false }) {
+  const { archive, integrity } = linked ? linkedCli : publishedCli;
   const bytes = await readFile(archive);
   if (createHash("sha512").update(bytes).digest("base64") !== integrity) {
     throw new Error("The bundled AugmentWorks CLI failed its integrity check.");

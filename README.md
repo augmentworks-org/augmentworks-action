@@ -19,7 +19,7 @@ jobs:
           mode: demo
 ```
 
-The examples use `@main` for an initial trial. Pin the Action to a reviewed full commit SHA before putting it in a release workflow. It ships the exact published `@augmentworks/cli@0.4.2` archive and checks its integrity before running it. GitHub provides the Node 24 action runtime. Self-hosted runners need Node 24 action support and system `tar`. The Action itself requires no npm installation or build step.
+The examples use `@main` for an initial trial. Pin the Action to a reviewed full commit SHA before putting it in a release workflow. Demo, local and ordinary hosted jobs use the exact published `@augmentworks/cli@0.4.2` archive and checks its integrity before running it. GitHub provides the Node 24 action runtime. Self-hosted runners need Node 24 action support and system `tar`. The Action itself requires no npm installation or build step.
 
 ## Test your own agent
 
@@ -91,6 +91,14 @@ jobs:
 
 The Action checks workspace identity, requests an estimate, and starts at most one run per invocation within the supplied ceiling. It waits for that run, checks its report, and evaluates the baseline gate if configured. A green hosted step requires a passing candidate and, when supplied, a passing gate. Pending grading and operating errors fail the step. If grading is incomplete or a request is interrupted, use the original run ID or the CLI's recovery state before starting another assessment.
 
+## Link a protected push to its hosted run
+
+Set `github-link: required` to record the GitHub job against a hosted run. The first attempt quotes one shard from a saved suite. If GitHub reruns that job on a fresh runner, the Action asks AugmentWorks for the original admission request and reuses its quote and run ID. A confirmed link identifies the workflow that tested the fixed target. Its deployed revision is recorded as `unknown`.
+
+Start with the [protected-push workflow and enrollment steps](examples/linked-protected-push.md). This mode requires the platform admission, recovery and attachment endpoints, a workspace key enrolled for the binding, and GitHub OIDC permission on the job. It defaults to the reserved `staging.augmentworks.ai` service origin; configure an isolated deployment there before using the example. Select `platform-environment: production` only for a separately enrolled production workflow.
+
+Linked mode uses the CLI from [reviewed commit f4097e9](https://github.com/augmentworks-org/augmentworks-cli/commit/f4097e989d68f54ecbb781d19343350b761922e8). The Action verifies the bundled archive before execution. Its build and integrity checks are documented in [vendor/README.md](vendor/README.md).
+
 ## Inputs
 
 | Input | Behavior |
@@ -100,6 +108,12 @@ The Action checks workspace identity, requests an estimate, and starts at most o
 | `config` | HTTP target config, relative to the working directory. Defaults to `augmentworks.yaml`. |
 | `packet` | Required in local mode. Use a local JSON packet, a directory containing `packet.json`, or the bundled `support-refunds-starter@0.1.0` for its matching workflow target. |
 | `assessment` | Hosted assessment selection. Defaults to `augmentworks.assessment.yaml`. |
+| `github-link` | Defaults to `off`. Set to `required` for a hosted, protected branch push. |
+| `platform-environment` | Linked jobs use `staging` by default. Set `production` explicitly to use the production platform. |
+| `binding-id`, `suite-revision-id` | Enrolled binding UUID and approved saved suite revision UUID. Both are required for linked jobs. |
+| `shard`, `manifest` | Linked jobs require one shard ID. Supply an optional compiled manifest path in place of an assessment. |
+| `job-key` | Enrolled GitHub job key, defaulting to the job ID. Use the same ID and display name in the single-job workflow. |
+| `matrix-leg`, `evaluation-slot` | Omit or use `default` for a linked job. |
 | `output-dir` | Fresh report directory under the working directory. The default creates a unique path under `.augmentworks/`. |
 | `api-key` | Hosted machine key. Can also be provided through `AUGMENTWORKS_API_KEY`. |
 | `workspace-id` | Expected hosted workspace UUID. Can also be provided through `AUGMENTWORKS_WORKSPACE_ID`. |
@@ -117,6 +131,8 @@ The Action checks workspace identity, requests an estimate, and starts at most o
 | `report-path` | Absolute path on the runner to local `report.json`, or a sanitized `hosted-summary.json` for a hosted run. |
 | `report-url` | Private dashboard URL for a hosted run, when available. |
 | `failed-checks` | JSON array of failed check identifiers available to the Action. An empty list can also mean grading was incomplete; use the outcome and exit code for the verdict. |
+| `link-status` | `linked` after server-confirmed attachment, `unconfirmed` for an unresolved admission, or empty when unavailable. |
+| `revision-verification` | `unknown` for a confirmed fixed-target link, otherwise empty. |
 | `provenance-path` | Runner-local JSON associating the result with its GitHub context, including the event SHA, PR number when available, and optional explicitly supplied target revision. |
 
 Access outputs as `${{ steps.eval.outputs.run-id }}` with the step ID shown above. Use `if: always()` on a later step if you need the result after a failure. Evidence remains on the runner unless your workflow uploads it. Local reports can include conversations and observed state. Restrict artifact access and retention if you choose to upload them.

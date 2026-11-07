@@ -19,6 +19,8 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - run: node --test
+      - name: Rebuild and verify the linked staging CLI
+        run: bash scripts/verify-linked-cli.sh
 
       - name: Run the built-in demo through the Action
         uses: ./

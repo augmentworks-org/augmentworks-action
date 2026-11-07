@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { startLinkedRun } from './linked-hosted.mjs';
+import { validateLinkedApiOrigin } from './linked-api.mjs';
 
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const isUuid = value => typeof value === 'string' && uuid.test(value);
@@ -76,13 +78,54 @@ async function inspectRun(call, runId, workspaceId, baselineId) {
     : result(10, 'The candidate did not pass its hosted checks. Inspect the saved assessment.', checks);
 }
 
-// Authentication, an estimate, and all reads are non-billable. This action issues at most
-// one admission command per invocation; an interrupted one must be recovered separately.
-export async function runHosted({ config, assessment, baselineId, maxCredits, workspaceId, cli, outputDir }) {
+async function estimateRun(call, testArgs, workspaceId, cap) {
+  const estimate = await call([...testArgs, '--estimate']);
+  if (estimate.code !== 0) return { error: result(estimate.code, 'Unable to quote this assessment. No admission was requested.') };
+  const quote = estimate.data;
+  if (quote?.ok !== true || quote.schemaVersion !== 'aw-billing/1' || quote.estimateOnly !== true ||
+      !sameId(quote.workspaceId, workspaceId) || !Number.isSafeInteger(quote.executionUnits) || quote.executionUnits < 0) {
+    return { error: result(4, 'The estimate did not return a valid quote for the expected workspace.') };
+  }
+  if (quote.executionUnits > Number(cap)) {
+    return { error: result(13, `The quote of ${quote.executionUnits} credits exceeds the ${Number(cap)}-credit ceiling. No run was started.`) };
+  }
+  return { quote };
+}
+
+async function startUnlinkedRun({ call, testArgs, estimate, cap }) {
+  const { quote, error } = await estimate();
+  if (error) return { error };
+  try {
+    const admitted = await call([...testArgs, '--max-credits', cap, '--yes']);
+    return { admitted, quotedCredits: quote.executionUnits };
+  } catch {
+    return { error: result(4, 'Admission could not be confirmed. Inspect CLI recovery state before retrying.') };
+  }
+}
+
+// Auth, an estimate, and report/gate reads are non-billable. A linked attempt can
+// only execute using the original quote and create ID recovered for this GitHub job.
+export async function runHosted(options) {
+  const { config, assessment, baselineId, maxCredits, workspaceId, cli, outputDir, githubLink = 'off' } = options;
   const cap = String(maxCredits ?? '');
   if (!isUuid(workspaceId) || (baselineId && !isUuid(baselineId))) return result(2, 'Set a workspace UUID and, when used, a baseline UUID.');
   if (!/^\d+$/.test(cap) || !Number.isSafeInteger(Number(cap))) return result(2, 'Set a finite, nonnegative integer max-credits ceiling.');
-  if (!config || !assessment) return result(2, 'Hosted mode requires a config and a saved-suite assessment file.');
+  const linkedMode = githubLink === 'required';
+  if (!linkedMode && githubLink !== 'off') return result(2, 'Use an explicit supported GitHub link mode.');
+  const { manifest, shard } = options;
+  let origin = 'https://augmentworks.ai';
+  if (linkedMode) {
+    if (!config || Boolean(assessment) === Boolean(manifest) || !shard || baselineId || options.testedRevision) {
+      return result(2, 'Linked mode requires one saved suite shard and fixed-target inputs.');
+    }
+    try {
+      origin = validateLinkedApiOrigin(options.apiOrigin ?? origin);
+    } catch {
+      return result(2, 'Linked CI requires an approved AugmentWorks origin.');
+    }
+  } else if (!config || !assessment) {
+    return result(2, 'Hosted mode requires a config and a saved-suite assessment file.');
+  }
   try {
     await mkdir(dirname(outputDir), { recursive: true, mode: 0o700 });
     await mkdir(outputDir, { mode: 0o700 });
@@ -105,41 +148,38 @@ export async function runHosted({ config, assessment, baselineId, maxCredits, wo
   const missing = requiredActions.filter(action => !granted.has(action));
   if (missing.length) return result(3, 'The CI key needs these workspace actions: ' + missing.join(', ') + '.');
 
-  const testArgs = ['test', '--headless', '--config', config, '--assessment', assessment];
-  const estimate = await call([...testArgs, '--estimate']);
-  if (estimate.code !== 0) return result(estimate.code, 'Unable to quote this assessment. No admission was requested.');
-  const quote = estimate.data;
-  if (quote?.ok !== true || quote.schemaVersion !== 'aw-billing/1' || quote.estimateOnly !== true ||
-      !sameId(quote.workspaceId, workspaceId) || !Number.isSafeInteger(quote.executionUnits) || quote.executionUnits < 0) {
-    return result(4, 'The estimate did not return a valid quote for the expected workspace.');
+  const selection = linkedMode && manifest ? ['--manifest', manifest] : ['--assessment', assessment];
+  const testArgs = ['test', '--headless', '--config', config, ...selection];
+  if (linkedMode) testArgs.push('--shard', shard);
+  const start = { call, testArgs, estimate: () => estimateRun(call, testArgs, workspaceId, cap), cap };
+  const execution = linkedMode
+    ? await startLinkedRun(options, start, result)
+    : await startUnlinkedRun(start);
+  if (execution.error) {
+    if (isUuid(execution.error.runId)) execution.error.reportUrl = origin + '/portal/runs/' + execution.error.runId;
+    return execution.error;
   }
-  if (quote.executionUnits > Number(cap)) {
-    return result(13, `The quote of ${quote.executionUnits} credits exceeds the ${Number(cap)}-credit ceiling. No run was started.`);
-  }
-
-  let admitted;
-  try {
-    admitted = await call([...testArgs, '--max-credits', cap, '--yes']);
-  } catch {
-    return result(4, 'Admission could not be confirmed. Inspect CLI recovery state before retrying.');
-  }
+  const { admitted, quotedCredits, link } = execution;
   const runId = admitted.data?.run_id;
   if (!isUuid(runId)) return result(admitted.code || 4, 'No valid hosted run ID was returned. Inspect CLI recovery state before retrying.');
   let outcome;
   try {
     if (![0, 10, 11].includes(admitted.code) || (admitted.data.ok === false && admitted.code !== 11)) {
       outcome = result(admitted.code || 4, 'Hosted execution stopped. Inspect the original run and CLI recovery state before retrying.');
+    } else if (link && admitted.code === 11 && ['queued', 'connected', 'running', 'cancel_requested'].includes(admitted.data.status)) {
+      outcome = result(11, 'The original run is active. Follow its run ID while the original runner finishes.');
     } else {
       outcome = await inspectRun(call, runId, workspaceId, baselineId);
     }
   } catch {
     outcome = result(4, 'Could not finish inspecting the original run. Re-query its ID before starting new work.');
   }
+  if (link) Object.assign(outcome, link);
   outcome.runId = runId;
-  outcome.reportUrl = `https://augmentworks.ai/portal/runs/${runId}`;
+  outcome.reportUrl = origin + '/portal/runs/' + runId;
   const path = join(outputDir, 'hosted-summary.json');
   try {
-    await writeFile(path, JSON.stringify({ ...outcome, reportPath: undefined, quotedCredits: quote.executionUnits }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    await writeFile(path, JSON.stringify({ ...outcome, reportPath: undefined, quotedCredits }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     outcome.reportPath = path;
   } catch {
     return { ...outcome, exitCode: outcome.exitCode || 1, outcome: 'error', detail: 'The hosted result is available, but the local summary could not be written.' };

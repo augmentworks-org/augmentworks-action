@@ -23,6 +23,10 @@ export async function writeProvenance(env, event, options, result) {
     ...event,
     tested_revision: options.testedRevision || null,
     mode: options.mode,
+    ...(options.githubLink === 'required' && {
+      link_status: result.linkStatus || 'unconfirmed',
+      revision_verification: result.revisionVerification || null,
+    }),
     run_id: result.runId,
     outcome: result.outcome,
     exit_code: result.exitCode,
@@ -41,6 +45,8 @@ export async function publishResult(env, result, provenancePath) {
     'report-url': result.reportUrl,
     'failed-checks': JSON.stringify(checked),
     'provenance-path': provenancePath,
+    'link-status': result.linkStatus,
+    'revision-verification': result.revisionVerification,
   };
   if (env.GITHUB_OUTPUT) {
     await appendFile(env.GITHUB_OUTPUT, Object.entries(outputs).map(([key, value]) => fileCommand(key, value)).join(''));
@@ -51,6 +57,8 @@ export async function publishResult(env, result, provenancePath) {
     '**Outcome** ' + escapeHtml(result.outcome) + ' (exit ' + result.exitCode + ')',
   ];
   if (result.detail) lines.push('', escapeHtml(result.detail));
+  if (result.linkStatus === 'linked') lines.push('', 'GitHub job linked to the run. The fixed target’s deployed revision is unknown.');
+  if (result.linkStatus === 'unconfirmed') lines.push('', 'GitHub run attachment is unconfirmed.');
   if (result.runId) lines.push('', 'Run <code>' + escapeHtml(result.runId) + '</code>');
   if (checked.length) lines.push('', '**Failed checks**', '', ...checked.map(id => '- <code>' + escapeHtml(id) + '</code>'));
   if (result.reportUrl) lines.push('', '[Open the AugmentWorks report](' + result.reportUrl + ')');

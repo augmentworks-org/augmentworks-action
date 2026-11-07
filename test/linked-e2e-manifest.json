@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "aw-suite-selection/2",
+  "documentKind": "suite_selection_manifest",
+  "selectionVersion": "2.0.0",
+  "createsBillableRun": false,
+  "workspaceId": "11111111-1111-4111-8111-111111111111",
+  "suiteRevisionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "suiteId": "policy-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "semanticRevisionHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "catalogChecksum": null,
+  "inventoryHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "normalizedSelection": {
+    "profile": "release",
+    "includeTags": [],
+    "excludeTags": [],
+    "conversationMode": "single_turn",
+    "excludedCaseIds": [],
+    "requestedCaseIds": [
+      "aw-customer-suite/1.0.0/policy-p01",
+      "aw-customer-suite/1.0.0/policy-p02"
+    ]
+  },
+  "requestedCaseCount": 2,
+  "includedCaseCount": 2,
+  "plannedExecutions": 2,
+  "plannedCommands": 2,
+  "perRunLimits": {
+    "maxCases": 20,
+    "maxExecutions": 60,
+    "maxCommands": 512
+  },
+  "quoteIsAuthoritative": true,
+  "aggregateReleaseRequiresCompleteCoverage": true,
+  "executable": true,
+  "unexecutableReason": null,
+  "included": [
+    {
+      "caseId": "aw-customer-suite/1.0.0/policy-p01",
+      "reasonCode": "included",
+      "message": "Case aw-customer-suite/1.0.0/policy-p01 is included once in the normalized selection."
+    },
+    {
+      "caseId": "aw-customer-suite/1.0.0/policy-p02",
+      "reasonCode": "included",
+      "message": "Case aw-customer-suite/1.0.0/policy-p02 is included once in the normalized selection."
+    }
+  ],
+  "excluded": [],
+  "incompatible": [],
+  "shards": [
+    {
+      "shardId": "shard-000",
+      "shardIndex": 0,
+      "shardIdentityHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "caseIds": [
+        "aw-customer-suite/1.0.0/policy-p01",
+        "aw-customer-suite/1.0.0/policy-p02"
+      ],
+      "plannedExecutions": 2,
+      "plannedCommands": 2,
+      "planHash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "packetBindings": [
+        {
+          "key": "aw-customer-suite",
+          "version": "1.0.0",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ],
+      "compileOk": true,
+      "compileReasonCode": null,
+      "compileMessage": null
+    }
+  ],
+  "suiteBinding": {
+    "schemaVersion": "aw-saved-suite-binding/1",
+    "suiteId": "policy-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "suiteRevisionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "canonicalHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "semanticRevisionHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "cases": [
+      {
+        "caseId": "policy-p01",
+        "scenarioId": "aw-customer-suite/1.0.0/policy-p01",
+        "repetitions": 1
+      },
+      {
+        "caseId": "policy-p02",
+        "scenarioId": "aw-customer-suite/1.0.0/policy-p02",
+        "repetitions": 1
+      }
+    ]
+  },
+  "manifestHash": "f666540a78a3758c213fee5ffdcc5e1f7fe5b178bef8871f8759bf9535dcec08"
+}

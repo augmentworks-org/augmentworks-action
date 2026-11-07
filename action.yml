@@ -17,8 +17,26 @@ inputs:
   packet:
     description: Local packet file, directory, or bundled packet ID. Required in local mode.
   assessment:
-    description: Hosted assessment configuration relative to working-directory.
-    default: augmentworks.assessment.yaml
+    description: Hosted assessment configuration relative to working-directory. Defaults to augmentworks.assessment.yaml when manifest is omitted.
+  github-link:
+    description: Set to required to admit and attach a hosted assessment for an enrolled protected push.
+    default: 'off'
+  platform-environment:
+    description: AugmentWorks environment for linked CI. Choose staging (default) or production.
+  binding-id:
+    description: Enrolled GitHub repository binding UUID. Required in linked mode.
+  suite-revision-id:
+    description: Immutable saved suite revision UUID approved by the binding. Required in linked mode.
+  shard:
+    description: Exact compiled shard ID to run from the saved suite. Required in linked mode.
+  manifest:
+    description: In linked mode, use a compiled saved-suite manifest in place of the assessment file.
+  job-key:
+    description: Enrolled job key. Defaults to the GitHub job ID.
+  matrix-leg:
+    description: Linked CI supports only the default leg.
+  evaluation-slot:
+    description: Linked CI supports only the default evaluation slot.
   max-credits:
     description: Explicit nonnegative integer credit ceiling. Required for hosted mode.
   api-key:
@@ -44,6 +62,10 @@ outputs:
     description: Hosted dashboard link when a hosted run ID is known.
   failed-checks:
     description: JSON array of identified failing policy checks. Reports may contain additional details.
+  link-status:
+    description: Linked after confirmed server attachment, unconfirmed for an unresolved admission, or empty when unavailable.
+  revision-verification:
+    description: Returns unknown for a confirmed fixed-target link. Empty when unavailable.
   provenance-path:
     description: Absolute path to a runner-local JSON file associating the run with available GitHub revision and PR metadata.
 runs:
