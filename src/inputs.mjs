@@ -38,6 +38,13 @@ export async function readInputs(env) {
   };
   const mode = input('mode') || 'local';
   requireInput(['local', 'hosted', 'demo'].includes(mode), 'mode must be local, hosted, or demo.');
+  const githubLink = input('github-link') || 'off';
+  requireInput(['off', 'required'].includes(githubLink), 'github-link must be off or required.');
+  const linked = githubLink === 'required';
+  requireInput(!linked || mode === 'hosted', 'github-link: required needs hosted mode.');
+  const linkedInputs = ['binding-id', 'suite-revision-id', 'shard', 'manifest', 'job-key', 'platform-environment', 'matrix-leg', 'evaluation-slot'];
+  requireInput(linked || !linkedInputs.some(name => input(name)), 'Linked CI inputs require github-link: required and hosted mode.');
+  requireInput(!input('operation-id') && !input('deployment-id'), 'Operation dispatch and preview deployments are unavailable in this Action.');
   const root = await realpath(env.GITHUB_WORKSPACE || process.cwd());
   const cwd = await existingPath(root, root, input('working-directory') || '.', 'working-directory', ['isDirectory']);
   const outputDir = resolve(cwd, input('output-dir') || join('.augmentworks', 'action-' + randomUUID()));
@@ -58,7 +65,29 @@ export async function readInputs(env) {
     }
     return options;
   }
-  options.assessment = await existingPath(root, cwd, input('assessment') || 'augmentworks.assessment.yaml', 'assessment', ['isFile']);
+  options.githubLink = githubLink;
+  if (linked) {
+    requireInput(!testedRevision, 'A fixed target cannot attest a tested-revision in linked mode.');
+    requireInput(!input('baseline-id') && !env.AUGMENTWORKS_BASELINE_ID, 'Linked fixed-target admission does not support baseline-id.');
+    options.bindingId = input('binding-id').toLowerCase();
+    options.suiteRevisionId = input('suite-revision-id').toLowerCase();
+    requireInput(uuid.test(options.bindingId) && uuid.test(options.suiteRevisionId), 'Linked CI requires binding-id and suite-revision-id UUIDs.');
+    options.jobKey = input('job-key') || env.GITHUB_JOB || '';
+    requireInput(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(options.jobKey), 'Linked CI requires the enrolled job key.');
+    options.shard = input('shard');
+    requireInput(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,299}$/.test(options.shard), 'Linked CI requires one explicit saved-suite shard ID.');
+    requireInput(['', 'default'].includes(input('matrix-leg')) && ['', 'default'].includes(input('evaluation-slot')), 'Linked CI supports only the default matrix leg and evaluation slot.');
+    const environment = input('platform-environment') || 'staging';
+    requireInput(['staging', 'production'].includes(environment), 'platform-environment must be staging or production.');
+    options.apiOrigin = environment === 'production' ? 'https://augmentworks.ai' : 'https://staging.augmentworks.ai';
+  }
+  const manifest = input('manifest');
+  if (manifest) {
+    requireInput(!input('assessment'), 'Choose either a manifest or an assessment.');
+    options.manifest = await existingPath(root, cwd, manifest, 'manifest', ['isFile']);
+  } else {
+    options.assessment = await existingPath(root, cwd, input('assessment') || 'augmentworks.assessment.yaml', 'assessment', ['isFile']);
+  }
   const ceiling = input('max-credits');
   requireInput(/^\d+$/.test(ceiling) && Number.isSafeInteger(Number(ceiling)), 'Hosted mode requires an explicit nonnegative whole-number max-credits input.');
   options.maxCredits = Number(ceiling);
@@ -71,12 +100,19 @@ export async function readInputs(env) {
   return options;
 }
 
-export async function readEvent(env, mode) {
+export async function readEvent(env, mode, githubLink = 'off') {
   const event = env.GITHUB_EVENT_NAME || '';
   const isPR = event === 'pull_request' || event === 'pull_request_target';
   let payload;
   if (mode !== 'demo' && event === 'pull_request_target') {
     throw new InputError('Use pull_request for assessments. Privileged pull_request_target workflows may not execute a customer test.');
+  }
+  if (githubLink === 'required') {
+    requireInput(event === 'push' && env.GITHUB_REF_PROTECTED === 'true' && /^refs\/heads\/.+/.test(env.GITHUB_REF ?? ''),
+      'Linked CI requires a push to an enrolled protected branch.');
+    requireInput(/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? '') && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '') &&
+      [env.GITHUB_REPOSITORY_ID, env.GITHUB_REPOSITORY_OWNER_ID, env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT].every(value => /^[1-9]\d{0,18}$/.test(value ?? '')),
+      'Linked CI requires GitHub repository, commit, run and attempt identifiers.');
   }
   if (mode === 'hosted') {
     requireInput(['push', 'workflow_dispatch', 'pull_request', 'schedule', 'merge_group'].includes(event), 'Hosted mode requires a trusted push, dispatch, schedule, merge group, or same-repository pull request.');
@@ -114,7 +150,7 @@ export function childEnvironment(env, options) {
   }
   if (options.mode === 'hosted') {
     Object.assign(child, {
-      AUGMENTWORKS_API_URL: 'https://augmentworks.ai',
+      AUGMENTWORKS_API_URL: options.apiOrigin || 'https://augmentworks.ai',
       AUGMENTWORKS_API_KEY: options.apiKey,
       AUGMENTWORKS_WORKSPACE_ID: options.workspaceId,
     });

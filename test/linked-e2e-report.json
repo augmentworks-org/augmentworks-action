@@ -1,0 +1,95 @@
+{
+  "report": {
+    "schemaVersion": "aw-run-report/1",
+    "runId": "88888888-8888-4888-8888-888888888888",
+    "workspaceId": "11111111-1111-4111-8111-111111111111",
+    "dashboardUrl": "https://platform.invalid/portal/runs/88888888-8888-4888-8888-888888888888",
+    "asOf": "2026-09-07T12:00:00.000Z",
+    "executionStatus": "completed",
+    "outcome": "failed",
+    "creditState": "consumed",
+    "evaluationStatus": "complete",
+    "evaluationBinding": {
+      "evaluationId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "evaluationRevision": 1,
+      "snapshotHash": "3e4434b5147042a0a249b29cf7c12505c5dc78ab94ecaa789931f5dfea9c0f32",
+      "executionResultHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "assessmentPlanHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "referenceBundleHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "graderConfigHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "aggregate": {
+      "passed": 0,
+      "failed": 1,
+      "error": 0
+    },
+    "coverage": {
+      "plannedAttempts": 1,
+      "completedAttempts": 1,
+      "requiredJudgmentsPlanned": 1,
+      "requiredJudgmentsComplete": 1
+    },
+    "attempts": [
+      {
+        "attemptId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "scenarioId": "response-quality/0.1.0/R01",
+        "repetitionIndex": 0,
+        "attemptNumber": 1,
+        "executionStatus": "completed",
+        "cleanupState": "not_required",
+        "criterionIndexUrl": "https://platform.invalid/v1/runs/88888888-8888-4888-8888-888888888888/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/attempts/cccccccc-cccc-4ccc-8ccc-cccccccccccc/criteria",
+        "mappedResponse": {
+          "availability": "available",
+          "text": "The return window for unused items is 365 days, not 30 days.",
+          "sha256": "e009dc8615dc38b2725c604d0be220ff211616975872b92db72c695b2dc33ccb",
+          "truncated": false,
+          "turnId": "turn_1",
+          "evidenceId": "evidence_1"
+        },
+        "outcome": "fail"
+      }
+    ],
+    "retention": {
+      "retainUntil": "2026-12-06T12:00:00.000Z",
+      "policyVersion": "aw-retention/pack-90d-v1",
+      "purgedAt": null,
+      "contentAvailable": true
+    },
+    "reportReady": true,
+    "page": {
+      "nextCursor": null,
+      "hasMore": false,
+      "totalAttempts": 1
+    },
+    "createsBillableRun": false
+  },
+  "criteria": {
+    "schemaVersion": "aw-criterion-detail-read/1",
+    "runId": "88888888-8888-4888-8888-888888888888",
+    "workspaceId": "11111111-1111-4111-8111-111111111111",
+    "evaluationId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "evaluationRevision": 1,
+    "snapshotHash": "3e4434b5147042a0a249b29cf7c12505c5dc78ab94ecaa789931f5dfea9c0f32",
+    "attemptId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "criteria": [
+      {
+        "criterionId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "criterionKey": "response-quality/0.1.0/R01/facts",
+        "required": true,
+        "verdict": "fail",
+        "detailUrl": null,
+        "evidence": {
+          "availability": "available",
+          "text": "The return window for unused items is 365 days, not 30 days.",
+          "sha256": "e009dc8615dc38b2725c604d0be220ff211616975872b92db72c695b2dc33ccb",
+          "truncated": false
+        }
+      }
+    ],
+    "page": {
+      "nextCursor": null,
+      "hasMore": false,
+      "totalCriteria": 1
+    }
+  }
+}
